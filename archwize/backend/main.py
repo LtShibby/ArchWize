@@ -21,12 +21,15 @@ logger = logging.getLogger("archwize_api")
 
 load_dotenv()
 
+# Get allowed origins from environment or use default
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://archwize.vercel.app").split(",")
+
 app = FastAPI(title="ArchWize API", description="AI-Powered Diagram & Architecture Flowchart Generator")
 
-# Configure CORS
+# Configure CORS to allow access from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

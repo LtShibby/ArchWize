@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "archwize/frontend/package.json",
+      "use": "@vercel/next"
+    },
+    {
+      "src": "archwize/backend/api/*.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "archwize/backend/api/$1.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "archwize/frontend/$1"
+    }
+  ],
+  "env": {
+    "FRONTEND_URL": "https://archwize.vercel.app"
+  }
+} 

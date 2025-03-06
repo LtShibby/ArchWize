@@ -1,0 +1,15 @@
+{
+  "name": "archwize",
+  "version": "1.0.0",
+  "description": "ArchWize - Diagram and Architecture Flowchart Generator",
+  "scripts": {
+    "install:frontend": "cd archwize/frontend && npm install",
+    "install:backend": "pip install -r archwize/backend/requirements.txt",
+    "build": "npm run install:frontend && cd archwize/frontend && npm run build",
+    "start": "cd archwize/frontend && npm run start",
+    "dev": "concurrently \"cd archwize/backend && python main.py\" \"cd archwize/frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
