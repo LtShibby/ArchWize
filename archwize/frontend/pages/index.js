@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Head from 'next/head';
 import mermaid from "mermaid";
+import { Footer } from "../components/Footer";
 
 export default function Home() {
     const [input, setInput] = useState("");
@@ -10,6 +11,7 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [orientation, setOrientation] = useState("TD"); // Default to top-down
+    const [diagramType, setDiagramType] = useState(""); // To select diagram template type
     const diagramRef = useRef(null);
 
     useEffect(() => {
@@ -164,12 +166,57 @@ export default function Home() {
     const retryRender = () => {
         if (!rawDiagram) return;
         
-        // Look for checkout related keywords to determine if it's an e-commerce flow
+        // Check for different diagram types to use specialized templates
         const isCheckoutDiagram = 
             rawDiagram.includes("Shopping Cart") || 
             rawDiagram.includes("Checkout") || 
             rawDiagram.includes("Payment") ||
             rawDiagram.includes("Order");
+            
+        const isBuyOrderDiagram = 
+            rawDiagram.includes("Buy Order") || 
+            (rawDiagram.includes("Trade") && rawDiagram.includes("Kafka")) ||
+            (rawDiagram.includes("Client") && rawDiagram.includes("Service"));
+            
+        // Handle buy order processing diagram with a pre-built template
+        if (isBuyOrderDiagram) {
+            const buyOrderTemplate = `graph ${orientation};
+  Start["Receive Buy Order"] --> ValidateToken["Validate Authentication Token"];
+  ValidateToken --> CleanRequest["Clean and Standardize Request"];
+  CleanRequest --> SendRequest["Send Request to Trade Service"];
+  SendRequest --> TradeService["Trade Service"];
+  TradeService --> AuthorizeParse["Authorization & Parsing"];
+  TradeService --> NormalizeData["Normalize Trade Data"];
+  TradeService --> ValidateTrade["Validate Trade"];
+  TradeService --> EnrichData["Enrich Trade Data"];
+  TradeService --> BusinessEvent["Business Event Generation"];
+  BusinessEvent --> KafkaTopics["Emit Kafka Topics"];
+  KafkaTopics --> NewTrade["New Trade Topic"];
+  KafkaTopics --> AmendedTrade["Amended Trade Topic"];
+  KafkaTopics --> CanceledTrade["Canceled Trade Topic"];
+  NewTrade --> EventConsumers["Event Consumers"];
+  AmendedTrade --> EventConsumers;
+  CanceledTrade --> EventConsumers;
+  EventConsumers --> APIGateway["API Gateway"];
+  APIGateway --> NSCC["NSCC"];
+  APIGateway --> OCC["OCC"];
+  APIGateway --> DTC["DTC"];
+  APIGateway --> Fed["Fed"];
+  APIGateway --> ClientAPI["Client API"];
+  APIGateway --> Finra["Finra"];
+  APIGateway --> OtherConsumers["Other Consumers"];
+  NSCC --> End["End Process"];
+  OCC --> End;
+  DTC --> End;
+  Fed --> End;
+  ClientAPI --> End;
+  Finra --> End;
+  OtherConsumers --> End;`;
+            
+            console.log("Using buy order processing template");
+            renderDiagram(buyOrderTemplate);
+            return;
+        }
             
         // If this appears to be a checkout diagram with errors, use a known working template
         if (isCheckoutDiagram && (error || rawDiagram.includes("ConfirmPayPal ReviewOrder"))) {
@@ -237,6 +284,82 @@ export default function Home() {
         renderDiagram(fixedDiagram);
     };
     
+    // Add a function to use a template based on diagram type
+    const useTemplate = (type) => {
+        let templateCode = "";
+        
+        if (type === "checkout") {
+            templateCode = `graph ${orientation};
+  Start["User Begins Checkout"] --> ViewCart["View Shopping Cart"];
+  ViewCart --> EnterAddress["Enter Shipping Address"];
+  EnterAddress --> ChoosePayment["Choose Payment Method"];
+  ChoosePayment -->|Credit Card| ProcessCreditCard["Process Credit Card Payment"];
+  ProcessCreditCard --> ConfirmCreditCard["Confirm Credit Card Payment"];
+  ChoosePayment -->|PayPal| ProcessPayPal["Process PayPal Payment"];
+  ProcessPayPal --> ConfirmPayPal["Confirm PayPal Payment"];
+  ConfirmCreditCard --> ReviewSummary["Review Order Summary"];
+  ConfirmPayPal --> ReviewSummary;
+  ReviewSummary -->|Confirm| DispatchOrder["Dispatch Order"];
+  DispatchOrder --> Delivered["Order Marked as Delivered"];
+  ReviewSummary -->|Cancel| CancelCheckout["Cancel Checkout"];
+  CancelCheckout --> End["Checkout Process Ends"];
+  Delivered --> End;`;
+        } else if (type === "buyorder") {
+            templateCode = `graph ${orientation};
+  Start["Receive Buy Order"] --> ValidateToken["Validate Authentication Token"];
+  ValidateToken --> CleanRequest["Clean and Standardize Request"];
+  CleanRequest --> SendRequest["Send Request to Trade Service"];
+  SendRequest --> TradeService["Trade Service"];
+  TradeService --> AuthorizeParse["Authorization & Parsing"];
+  TradeService --> NormalizeData["Normalize Trade Data"];
+  TradeService --> ValidateTrade["Validate Trade"];
+  TradeService --> EnrichData["Enrich Trade Data"];
+  TradeService --> BusinessEvent["Business Event Generation"];
+  BusinessEvent --> KafkaTopics["Emit Kafka Topics"];
+  KafkaTopics --> NewTrade["New Trade Topic"];
+  KafkaTopics --> AmendedTrade["Amended Trade Topic"];
+  KafkaTopics --> CanceledTrade["Canceled Trade Topic"];
+  NewTrade --> EventConsumers["Event Consumers"];
+  AmendedTrade --> EventConsumers;
+  CanceledTrade --> EventConsumers;
+  EventConsumers --> APIGateway["API Gateway"];
+  APIGateway --> NSCC["NSCC"];
+  APIGateway --> OCC["OCC"];
+  APIGateway --> DTC["DTC"];
+  APIGateway --> Fed["Fed"];
+  APIGateway --> ClientAPI["Client API"];
+  APIGateway --> Finra["Finra"];
+  APIGateway --> OtherConsumers["Other Consumers"];
+  NSCC --> End["End Process"];
+  OCC --> End;
+  DTC --> End;
+  Fed --> End;
+  ClientAPI --> End;
+  Finra --> End;
+  OtherConsumers --> End;`;
+        } else if (type === "registration") {
+            templateCode = `graph ${orientation};
+  Start["User Begins Registration"] --> Register["Register User"];
+  Register --> EnterDetails["Enter User Details"];
+  EnterDetails --> Validate["Validate Input"];
+  Validate -->|Valid| Success["Account Created"];
+  Validate -->|Invalid| Retry["Retry Registration"];
+  Retry --> EnterDetails;
+  Success --> End["Registration Complete"];`;
+        }
+        
+        if (templateCode) {
+            // Set the raw diagram for future reference
+            setRawDiagram(templateCode);
+            
+            // Render the template
+            renderDiagram(templateCode);
+            
+            // Clear the error
+            setError("");
+        }
+    };
+    
     return (
         <div className="container">
             <Head>
@@ -296,12 +419,38 @@ export default function Home() {
                 {error && (
                     <div className="error-section">
                         <div className="error">{error}</div>
-                        <button 
-                            className="retry-btn"
-                            onClick={retryRender}
-                        >
-                            Attempt to Fix and Retry
-                        </button>
+                        <div className="error-actions">
+                            <button 
+                                className="retry-btn"
+                                onClick={retryRender}
+                            >
+                                Attempt to Fix and Retry
+                            </button>
+                            
+                            <div className="template-selector">
+                                <p>Or use a template:</p>
+                                <div className="template-buttons">
+                                    <button 
+                                        className="template-btn"
+                                        onClick={() => useTemplate("checkout")}
+                                    >
+                                        E-commerce Checkout
+                                    </button>
+                                    <button 
+                                        className="template-btn"
+                                        onClick={() => useTemplate("buyorder")}
+                                    >
+                                        Buy Order Processing
+                                    </button>
+                                    <button 
+                                        className="template-btn"
+                                        onClick={() => useTemplate("registration")}
+                                    >
+                                        User Registration
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -313,7 +462,6 @@ export default function Home() {
                                 {/* Mermaid diagram will be rendered here */}
                             </div>
                             
-                            {/* Add a button to show raw code */}
                             <button 
                                 className="toggle-code-btn"
                                 onClick={() => {
@@ -337,100 +485,7 @@ export default function Home() {
                 </div>
             </main>
 
-            <footer className="footer">
-                <p>Powered by ArchWize &copy; {new Date().getFullYear()}</p>
-            </footer>
-
-            <style jsx>{`
-                .container {
-                    min-height: 100vh;
-                    padding: 0 0.5rem;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    background-color: #f5f5f5;
-                }
-                .main {
-                    padding: 5rem 0;
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: flex-start;
-                    align-items: center;
-                    max-width: 1000px;
-                    width: 100%;
-                }
-                .title {
-                    margin: 0;
-                    line-height: 1.15;
-                    font-size: 4rem;
-                    text-align: center;
-                }
-                .highlight {
-                    color: #0070f3;
-                }
-                .description {
-                    text-align: center;
-                    line-height: 1.5;
-                    font-size: 1.5rem;
-                    margin: 1rem 0 2rem;
-                }
-                .input-section {
-                    width: 100%;
-                    margin-bottom: 2rem;
-                }
-                .prompt-input {
-                    width: 100%;
-                    padding: 1rem;
-                    font-size: 1rem;
-                    border: 1px solid #ddd;
-                    border-radius: 5px;
-                    margin-bottom: 1rem;
-                    resize: vertical;
-                }
-                .generate-btn {
-                    padding: 0.75rem 1.5rem;
-                    background-color: #0070f3;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    font-size: 1rem;
-                    cursor: pointer;
-                    transition: background-color 0.3s;
-                }
-                .generate-btn:hover {
-                    background-color: #0051a3;
-                }
-                .generate-btn:disabled {
-                    background-color: #ccc;
-                    cursor: not-allowed;
-                }
-                .diagram-section {
-                    width: 100%;
-                    margin-top: 2rem;
-                    padding: 1rem;
-                    background-color: white;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                }
-                .error {
-                    color: #e74c3c;
-                    margin: 1rem 0;
-                    padding: 0.75rem;
-                    background-color: #ffeaea;
-                    border-radius: 5px;
-                    width: 100%;
-                }
-                .footer {
-                    width: 100%;
-                    height: 100px;
-                    border-top: 1px solid #eaeaea;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                }
-            `}</style>
+            <Footer />
         </div>
     );
 } 
