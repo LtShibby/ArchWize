@@ -49,6 +49,9 @@ class DiagramService:
         
         system_prompt = f"""
         You are an AI designed to generate **valid, properly formatted Mermaid.js diagrams** based on user descriptions.  
+        
+        ⚠️ **CRITICAL**: DO NOT include arrows in the graph declaration line! The first line must be EXACTLY "graph {flow_direction};" without any arrows or extra characters.
+
         Ensure that your response strictly follows these rules:
 
         1. **Return only the Mermaid.js code**—no extra Markdown formatting, explanations, or additional text.
@@ -60,6 +63,7 @@ class DiagramService:
         7. **Every node connection must end with a semicolon** (e.g., `NodeA --> NodeB;`)
         8. **All conditional paths must be properly formatted** (e.g., `NodeA --> |Condition| NodeB;`)
         9. **Ensure every node is connected correctly** - don't leave nodes disconnected or missing arrows.
+        10. **IMPORTANT: The graph declaration MUST be `graph {flow_direction};` exactly - DO NOT include any arrows like `-->` in this line**
 
         Example of a properly formatted user registration flowchart with {orientation_description} orientation:
         ```
@@ -293,6 +297,28 @@ class DiagramService:
         """
         print(f"Raw Mermaid code received:\n{code}")
         
+        # DIRECT FIX for the persistent "graph --> XX" issue (must come first)
+        if code.lstrip().startswith("graph -->"):
+            # Extract the orientation if it's there, or default to the provided orientation
+            match = re.search(r"graph\s*--+>\s*([A-Z][A-Z])", code)
+            if match:
+                extracted_orientation = match.group(1)
+                code = code.replace(f"graph --> {extracted_orientation}", f"graph {extracted_orientation}")
+            else:
+                # If we can't extract, just replace with the known orientation
+                code = re.sub(r"graph\s*--+>\s*", f"graph {orientation} ", code)
+        
+        # NEW FIX: Remove any non-diagram content like copyright notices, UI elements, etc.
+        # Keep only the content between graph declaration and the last semicolon
+        if "graph" in code:
+            graph_start = code.find("graph")
+            if graph_start >= 0:
+                # Find the last occurrence of semicolon that's part of the diagram
+                semicolons = [i for i, char in enumerate(code) if char == ';']
+                if semicolons:
+                    last_semicolon = max(semicolons)
+                    code = code[graph_start:last_semicolon+1]
+        
         # Remove any text before and after the mermaid code
         # First, try to extract from markdown code blocks if present
         if "```" in code:
@@ -310,6 +336,19 @@ class DiagramService:
         
         # Remove any leading/trailing whitespace
         code = code.strip()
+        
+        # FIX: Clean up any variation of "graph [arrows] XX" to "graph XX"
+        code = re.sub(r'graph\s*(-+>)+\s*([A-Z]+)', r'graph \2', code)
+        
+        # Final direct replacement just to be sure
+        if code.startswith("graph -->"):
+            code = code.replace("graph -->", f"graph {orientation}")
+        
+        # First-line direct substitution for absolute certainty
+        lines = code.split('\n')
+        if lines and "graph" in lines[0] and "-->" in lines[0]:
+            lines[0] = f"graph {orientation};"
+            code = '\n'.join(lines)
         
         # Ensure the code contains basic mermaid syntax
         if not any(keyword in code for keyword in ["graph ", "sequenceDiagram", "classDiagram", "erDiagram", "stateDiagram", "gantt", "pie"]):
@@ -485,6 +524,12 @@ class DiagramService:
         formatted_code = formatted_code.replace("-->|", "--> |")  # Add space before condition
         formatted_code = formatted_code.replace("|| ", "|")       # Fix double pipes
         formatted_code = formatted_code.replace("||", "|")        # Fix any remaining double pipes
+        
+        # FIX: Remove unwanted arrows inside node labels
+        formatted_code = re.sub(r'\["([^"]*?)\s*-->\s*([^"]*?)"\]', r'["\1 \2"]', formatted_code)
+        
+        # MORE AGGRESSIVE NODE LABEL FIX - replace all arrow sequences in node labels with spaces
+        formatted_code = re.sub(r'\["([^"]*?)(\s*-+>\s*)([^"]*?)"\]', r'["\1 \3"]', formatted_code)
         
         # Final check to ensure proper connections between all nodes
         lines = formatted_code.split("\n")
